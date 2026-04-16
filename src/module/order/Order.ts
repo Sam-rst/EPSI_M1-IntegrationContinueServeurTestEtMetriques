@@ -18,7 +18,6 @@ export class Order {
     public status: OrderStatus;
 
     constructor(productsIds: number[], totalPrice: number) {
-
         if (productsIds.length < 1 || productsIds.length > 5) {
             throw new Error('An order must contain between 1 and 5 products.');
         }
@@ -33,5 +32,4 @@ export class Order {
         this.totalPrice = totalPrice;
         this.productIds = productsIds;
     }
-
 }

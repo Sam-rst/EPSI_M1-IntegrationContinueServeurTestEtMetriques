@@ -134,7 +134,6 @@ describe('US-1 : Créer un produit - E2E', () => {
         expect(products).toHaveLength(0);
     });
 
-
     test('Scénario 5: création échouée, titre supérieur à 20 caractères', async () => {
         await dataSource.getRepository(Product).clear();
 
