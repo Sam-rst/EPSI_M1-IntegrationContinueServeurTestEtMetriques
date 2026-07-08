@@ -1,0 +1,22 @@
+name: CI
+
+# Orchestrateur : au push/PR sur main, on lance la CI de CHAQUE service.
+# Le détail des jobs (quality/security/tests/build) est dans ci-api.yml / ci-web.yml.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  api:
+    name: api
+    uses: ./.github/workflows/ci-api.yml
+
+  web:
+    name: web
+    uses: ./.github/workflows/ci-web.yml

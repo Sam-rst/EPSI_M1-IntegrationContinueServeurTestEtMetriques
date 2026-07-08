@@ -27,28 +27,38 @@ uv run poe <tache>             npm run <tache>
 Les **composites** (`quality`, `tests`, `security`, `ci`) servent surtout **en local**
 (et dans les hooks git). La **CI appelle les tâches granulaires** une par step.
 
-## CI — garder `main` déployable (`.github/workflows/ci-*.yml`)
+## CI — garder `main` déployable
 
-Un fichier **par service** (`ci-api.yml`, `ci-web.yml`), déclenché au push/PR sur `main`
-(filtré par chemin). Un **job par famille de risque**, chaque **step = une tâche** :
+Un **orchestrateur** `ci.yml` (déclenché au push/PR sur `main`) appelle la CI
+**réutilisable de chaque service** : `ci-api.yml` et `ci-web.yml`.
+Dans chaque service, un **job par famille de risque** enchaîné, chaque **step = une tâche** :
 
 ```
-quality  → lint → format → typecheck → deadcode
-security → audit:deps → audit:code
-tests    → tests:unit → tests:integ
-build    → build → docker build         (dépend de quality+security+tests)
+ci.yml
+ ├─ api → quality → security → tests → build   (ci-api.yml)
+ └─ web → quality → security → tests → build   (ci-web.yml)
+
+quality  = lint → format → typecheck → deadcode
+security = audit:deps → audit:code
+tests    = tests:unit → tests:integ
+build    = build → docker build
 ```
 
 CI verte ⇒ `main` propre ⇒ déployable.
 
-## CD — déployer au tag SemVer (`.github/workflows/cd-*.yml`)
+## CD — déployer au tag SemVer
 
-Un fichier **par service** (`cd-api.yml`, `cd-web.yml`), déclenché au **push d'un tag `vX.Y.Z`** :
+Un **orchestrateur** `cd.yml` (déclenché au **push d'un tag `vX.Y.Z`**) appelle la CD
+**réutilisable de chaque service** : `cd-api.yml` et `cd-web.yml` :
 
 ```
-ci (réutilise la CI) → publish (image Docker taguée SemVer sur GHCR)
-                     → e2e (sur l'image publiée / la stack)
-                     → deploy (simulé : run image + smoke test)
+cd.yml (tag vX.Y.Z)
+ ├─ api → ci → publish → e2e → deploy   (cd-api.yml)
+ └─ web → ci → publish → e2e → deploy   (cd-web.yml)
+
+publish = image Docker taguée SemVer, poussée sur GHCR
+e2e     = tests de bout en bout sur l'image publiée / la stack
+deploy  = simulé : run de l'image + smoke test
 ```
 
 Versionnage **SemVer** : `vMAJEUR.MINEUR.CORRECTIF`.

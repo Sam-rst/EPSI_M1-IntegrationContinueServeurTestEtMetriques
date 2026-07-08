@@ -1,0 +1,22 @@
+name: CD
+
+# Orchestrateur : au push d'un tag SemVer (vX.Y.Z), on lance la CD de CHAQUE service.
+# Le détail (ci + publish + e2e + deploy) est dans cd-api.yml / cd-web.yml.
+on:
+  push:
+    tags: ["v*.*.*"]
+
+jobs:
+  api:
+    name: api
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/cd-api.yml
+
+  web:
+    name: web
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/cd-web.yml
