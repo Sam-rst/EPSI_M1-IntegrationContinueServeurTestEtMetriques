@@ -1,0 +1,8 @@
+dist
+node_modules
+playwright-report
+test-results
+coverage
+package-lock.json
+# le formatage cible le code, pas la doc
+*.md

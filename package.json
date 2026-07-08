@@ -1,0 +1,12 @@
+{
+  "name": "ci-cd-converter",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Monorepo convertisseur de devises (React + FastAPI) — démo CI/CD",
+  "scripts": {
+    "prepare": "husky"
+  },
+  "devDependencies": {
+    "husky": "^9.1.7"
+  }
+}

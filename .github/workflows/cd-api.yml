@@ -1,0 +1,117 @@
+name: CD · api
+
+# CD du service back, déclenchée par un tag SemVer.
+#   git tag v1.0.0 && git push origin v1.0.0
+on:
+  push:
+    tags: ["v*.*.*"]
+
+permissions:
+  contents: read
+  packages: write # publier l'image sur GHCR
+
+jobs:
+  # 1) On rejoue la CI du back sur le tag.
+  ci:
+    uses: ./.github/workflows/ci-api.yml
+
+  # 2) Build + push de l'image back, taguée avec la version SemVer.
+  publish:
+    name: 📦 publish back
+    needs: ci
+    runs-on: ubuntu-latest
+    outputs:
+      owner: ${{ steps.meta.outputs.owner }}
+      version: ${{ steps.meta.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Métadonnées (owner minuscule + version)
+        id: meta
+        run: |
+          echo "owner=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+          echo "version=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@v3
+      - name: Login GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build & push
+        uses: docker/build-push-action@v6
+        with:
+          context: ./apps/api
+          push: true
+          tags: |
+            ghcr.io/${{ steps.meta.outputs.owner }}/converter-back:${{ steps.meta.outputs.version }}
+            ghcr.io/${{ steps.meta.outputs.owner }}/converter-back:latest
+
+  # 3) Tests E2E sur l'IMAGE PUBLIÉE (iso-prod).
+  e2e:
+    name: 🎭 e2e back
+    needs: publish
+    runs-on: ubuntu-latest
+    env:
+      OWNER: ${{ needs.publish.outputs.owner }}
+      VERSION: ${{ needs.publish.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: Login GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Démarrer l'image publiée
+        run: docker run -d --name back -p 8000:8000 ghcr.io/$OWNER/converter-back:$VERSION
+      - name: Attendre le back
+        run: |
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:8000/health && break
+            sleep 2
+          done
+      - name: tests:e2e
+        working-directory: apps/api
+        env:
+          BASE_URL: http://localhost:8000
+        run: |
+          uv sync --dev
+          uv run poe tests:e2e
+      - name: Logs si échec
+        if: failure()
+        run: docker logs back
+      - name: Nettoyage
+        if: always()
+        run: docker rm -f back
+
+  # 4) Déploiement (simulé) de la version publiée + smoke test.
+  deploy:
+    name: 🚀 deploy back ${{ github.ref_name }}
+    needs: [publish, e2e]
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      OWNER: ${{ needs.publish.outputs.owner }}
+      VERSION: ${{ needs.publish.outputs.version }}
+    steps:
+      - name: Login GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Déployer $VERSION
+        run: |
+          echo "Déploiement back $OWNER @ $VERSION"
+          docker run -d --name back -p 8000:8000 ghcr.io/$OWNER/converter-back:$VERSION
+      - name: Smoke test
+        run: |
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:8000/health && break
+            sleep 2
+          done
+          curl -s "http://localhost:8000/convert?amount=10&source=EUR&target=USD"
+      - name: Nettoyage
+        if: always()
+        run: docker rm -f back

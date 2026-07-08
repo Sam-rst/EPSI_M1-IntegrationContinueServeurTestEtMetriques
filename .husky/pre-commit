@@ -1,0 +1,11 @@
+# pre-commit : checks RAPIDES avant chaque commit (feedback immédiat).
+# On ne met PAS les tests ici (trop lent) -> voir pre-push.
+echo "🔍 pre-commit : lint + format (back & front)"
+
+echo "  → back (apps/api)"
+( cd apps/api && uv run poe lint && uv run poe format ) || exit 1
+
+echo "  → front (apps/web)"
+( cd apps/web && npm run lint && npm run format ) || exit 1
+
+echo "✅ pre-commit OK"

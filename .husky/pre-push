@@ -1,0 +1,11 @@
+# pre-push : on rejoue la CI COMPLÈTE en local avant d'envoyer sur le remote
+# (quality + tests + security), pour éviter une CI rouge sur GitHub.
+echo "🚦 pre-push : CI complète (quality + tests + security)"
+
+echo "  → back (apps/api)"
+( cd apps/api && uv run poe ci ) || exit 1
+
+echo "  → front (apps/web)"
+( cd apps/web && npm run ci ) || exit 1
+
+echo "✅ pre-push OK"

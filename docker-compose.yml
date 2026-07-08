@@ -1,0 +1,14 @@
+# Compose de DEV local : build les images depuis les sources.
+#   docker compose up --build
+services:
+  back:
+    build: ./apps/api
+    ports:
+      - "8000:8000"
+
+  front:
+    build: ./apps/web
+    ports:
+      - "8080:80"
+    depends_on:
+      - back

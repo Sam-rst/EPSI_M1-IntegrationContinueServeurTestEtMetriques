@@ -1,0 +1,21 @@
+# ancien projet, ignoré
+express-archi-test-qualite
+
+# Node / front
+node_modules/
+apps/web/dist/
+apps/web/coverage/
+apps/web/playwright-report/
+apps/web/test-results/
+
+# Python / back
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+
+# Env local
+.env

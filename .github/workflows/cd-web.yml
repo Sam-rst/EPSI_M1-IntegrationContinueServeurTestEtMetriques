@@ -1,0 +1,113 @@
+name: CD · web
+
+# CD du service front, déclenchée par un tag SemVer.
+#   git tag v1.0.0 && git push origin v1.0.0
+on:
+  push:
+    tags: ["v*.*.*"]
+
+permissions:
+  contents: read
+  packages: write # publier l'image sur GHCR
+
+jobs:
+  # 1) On rejoue la CI du front sur le tag.
+  ci:
+    uses: ./.github/workflows/ci-web.yml
+
+  # 2) Build + push de l'image front, taguée avec la version SemVer.
+  publish:
+    name: 📦 publish front
+    needs: ci
+    runs-on: ubuntu-latest
+    outputs:
+      owner: ${{ steps.meta.outputs.owner }}
+      version: ${{ steps.meta.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Métadonnées (owner minuscule + version)
+        id: meta
+        run: |
+          echo "owner=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+          echo "version=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@v3
+      - name: Login GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build & push
+        uses: docker/build-push-action@v6
+        with:
+          context: ./apps/web
+          push: true
+          tags: |
+            ghcr.io/${{ steps.meta.outputs.owner }}/converter-front:${{ steps.meta.outputs.version }}
+            ghcr.io/${{ steps.meta.outputs.owner }}/converter-front:latest
+
+  # 3) Tests E2E de bout en bout : on monte la stack (front + un back de test)
+  #    via le compose de dev, puis Playwright pilote un vrai navigateur.
+  e2e:
+    name: 🎭 e2e front
+    needs: publish
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - name: Démarrer la stack (front + back)
+        run: docker compose -f docker-compose.yml up -d --build
+      - name: Attendre le front
+        run: |
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:8080/ && break
+            sleep 2
+          done
+      - name: tests:e2e (Playwright)
+        working-directory: apps/web
+        env:
+          BASE_URL: http://localhost:8080
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+          npm run tests:e2e
+      - name: Logs si échec
+        if: failure()
+        run: docker compose -f docker-compose.yml logs
+      - name: Nettoyage
+        if: always()
+        run: docker compose -f docker-compose.yml down
+
+  # 4) Déploiement (simulé) de l'image front publiée + smoke test.
+  deploy:
+    name: 🚀 deploy front ${{ github.ref_name }}
+    needs: [publish, e2e]
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      OWNER: ${{ needs.publish.outputs.owner }}
+      VERSION: ${{ needs.publish.outputs.version }}
+    steps:
+      - name: Login GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Déployer $VERSION
+        run: |
+          echo "Déploiement front $OWNER @ $VERSION"
+          docker run -d --name front -p 8080:80 ghcr.io/$OWNER/converter-front:$VERSION
+      - name: Smoke test (le front répond ?)
+        run: |
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:8080/ && break
+            sleep 2
+          done
+      - name: Nettoyage
+        if: always()
+        run: docker rm -f front

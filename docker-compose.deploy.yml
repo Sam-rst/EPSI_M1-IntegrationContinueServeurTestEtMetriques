@@ -1,0 +1,16 @@
+# Compose de DÉPLOIEMENT : ne build rien, tire les images publiées sur GHCR.
+# La version déployée est pilotée par le .env du serveur (OWNER + VERSION),
+# exactement comme dans le cours (VERSION=v1.2.3).
+#   OWNER=sam-rst VERSION=v1.0.0 docker compose -f docker-compose.deploy.yml up -d
+services:
+  back:
+    image: ghcr.io/${OWNER}/converter-back:${VERSION:-latest}
+    ports:
+      - "8000:8000"
+
+  front:
+    image: ghcr.io/${OWNER}/converter-front:${VERSION:-latest}
+    ports:
+      - "8080:80"
+    depends_on:
+      - back

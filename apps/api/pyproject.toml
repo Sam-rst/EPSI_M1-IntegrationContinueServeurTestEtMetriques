@@ -1,0 +1,85 @@
+[project]
+name = "api"
+version = "0.1.0"
+description = "Mini API de conversion de devises (FastAPI)"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+]
+
+# Outils de dev. La CI NE les appelle JAMAIS directement : elle passe
+# uniquement par l'interface de tâches `poe` définie plus bas.
+[dependency-groups]
+dev = [
+    "poethepoet>=0.30",      # task runner : `uv run poe <tache>`
+    "ruff>=0.8",             # lint + format
+    "ty>=0.0.1a1",           # typecheck (type checker Astral)
+    "vulture>=2.13",         # deadcode
+    "bandit>=1.8",           # audit:code (SAST)
+    "pip-audit>=2.7",        # audit:deps
+    "pytest>=8.3",           # tests
+    "pytest-cov>=6.0",       # tests:coverage
+    "httpx>=0.28",           # client HTTP (TestClient + e2e)
+]
+
+# uv ne doit PAS packager l'appli (c'est un service, pas une lib publiée)
+[tool.uv]
+package = false
+
+# ===========================================================================
+# INTERFACE DE TÂCHES — c'est CE que la CI appelle (uv run poe <tache>).
+# Mêmes noms que côté front (npm run <tache>). L'outil sous-jacent est masqué.
+# ===========================================================================
+[tool.poe.tasks]
+# --- quality ---
+"lint"          = "ruff check ."
+"lint:fix"      = "ruff check --fix ."
+"format"        = "ruff format --check ."
+"format:fix"    = "ruff format ."
+"typecheck"     = "ty check app"
+"typecheck:fix" = "ty check --fix app"
+"deadcode"      = "vulture app --min-confidence 80"
+# --- tests ---
+"tests:unit"     = "pytest tests/unit"
+"tests:integ"    = "pytest tests/integration"
+"tests:e2e"      = "pytest tests/e2e"
+"tests:coverage" = "pytest --cov=app --cov-report=term-missing tests/unit tests/integration"
+# --- build ---
+"start" = "uvicorn app.main:app --host 0.0.0.0 --port 8000"
+"build" = "python -m compileall app"
+# --- security ---
+"audit:deps" = "pip-audit"
+"audit:code" = "bandit -r app -q"
+
+# --- COMPOSITES (un par famille, appelés par la CI) ---
+[tool.poe.tasks.quality]
+sequence = ["lint", "format", "typecheck", "deadcode"]
+default_item_type = "ref"
+
+[tool.poe.tasks.tests]
+sequence = ["tests:unit", "tests:integ"]
+default_item_type = "ref"
+
+[tool.poe.tasks.security]
+sequence = ["audit:deps", "audit:code"]
+default_item_type = "ref"
+
+[tool.poe.tasks.ci]
+sequence = ["quality", "tests", "security"]
+default_item_type = "ref"
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+# E/F = pyflakes+pycodestyle, I = imports triés, B = bugbear, UP = pyupgrade
+select = ["E", "F", "I", "B", "UP"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.bandit]
+exclude_dirs = ["tests"]

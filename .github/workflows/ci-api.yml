@@ -1,0 +1,75 @@
+name: CI · api
+
+# CI du service back. Ne se déclenche que si apps/api change (monorepo).
+# Réutilisable par la CD via workflow_call.
+on:
+  push:
+    branches: [main]
+    paths: ["apps/api/**", ".github/workflows/ci-api.yml"]
+  pull_request:
+    branches: [main]
+    paths: ["apps/api/**", ".github/workflows/ci-api.yml"]
+  workflow_call:
+
+concurrency:
+  group: ci-api-${{ github.ref }}
+  cancel-in-progress: true
+
+# Toutes les commandes `run` s'exécutent dans apps/api.
+defaults:
+  run:
+    working-directory: apps/api
+
+jobs:
+  quality:
+    name: 🐍 quality
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync --dev
+      - name: lint
+        run: uv run poe lint
+      - name: format
+        run: uv run poe format
+      - name: typecheck
+        run: uv run poe typecheck
+      - name: deadcode
+        run: uv run poe deadcode
+
+  security:
+    name: 🐍 security
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync --dev
+      - name: audit:deps
+        run: uv run poe audit:deps
+      - name: audit:code
+        run: uv run poe audit:code
+
+  tests:
+    name: 🐍 tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync --dev
+      - name: tests:unit
+        run: uv run poe tests:unit
+      - name: tests:integ
+        run: uv run poe tests:integ
+
+  build:
+    name: 🐍 build
+    runs-on: ubuntu-latest
+    needs: [quality, security, tests]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync --dev
+      - name: build (le code compile ?)
+        run: uv run poe build
+      - name: build image docker (l'infra se build ?)
+        run: docker build -t converter-back:ci .
